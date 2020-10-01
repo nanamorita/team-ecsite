@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8" />
+
+<link href="/css/reset.css" th:href="@{/css/reset.css}" rel="stylesheet" />
+<link href="/css/style.css" th:href="@{/css/style.css}" rel="stylesheet" />
+<title>カート｜grapes</title>
+</head>
+<body>
+
+<header th:insert="fragments/page_header::pageHeader"></header>
+
+<main>
+
+	<div class="container cart">
+		<h2>カート</h2>
+		
+		<div class="noData" th:if="${carts == null || carts.size() == 0}">
+			<p class="info">カート情報はありません。</p>
+		</div>
+		
+		<table class="cart" th:if="${carts != null && carts.size() > 0}">
+				<tr>
+					<th>選択</th><th>画像</th><th>商品名</th><th>価格(円)</th><th>個数</th><th>小計(円)</th>
+				</tr>
+				<tr th:each="cart: ${carts}" th:object="${cart}">
+					<td><input type="checkbox" name="id" class="checkList" th:value="${cart.id}"/></td>
+					<td><img class="itemImage"	th:src="@{{imagePath} (imagePath=*{imageFullPath}) }" /></td>
+					<td th:text="*{productName}" />
+					<td class="number" th:text="*{price}" />
+					<td class="productCount number" th:text="*{productCount}" />
+					<td class="subtotal number" th:text="*{subtotal}" />
+				</tr>
+				<tr>
+					<td class="totalArea"></td>
+					<td class="totalArea"></td>
+					<td class="totalArea">合計(円)</td>
+					<td class="totalArea"></td>
+					<td class="totalArea" id="totalCount"></td>
+					<td class="totalArea" id="totalPrice"></td>
+				</tr>
+		</table>
+			
+		<div class="buttonArea"	th:if="${carts != null && carts.size() > 0}">
+			<button id="deleteButton" disabled>削除</button>
+			<form id="cartForm" action="/grapes/settlement/" method="post">
+				<button type="submit" id="settlementButton">購入</button>
+			</form>
+		</div>
+	
+	</div>
+
+</main>
+
+<script th:inline="javascript">
+
+//Javascript内でTymeleafを使う場合、CDATAセクションを記述
+/*<![CDATA[*/
+
+$(() => {
+	// 購入個数と金額の合計を算出し、合計欄に設定
+	calcTotalArea();
+	
+	// 削除ボタンをクリックした時の処理
+	$('#deleteButton').on('click', () => {
+		// クラス属性checkListを持つ要素からチェックされた要素のみを配列checkedListに格納
+		let checkedList = $('.checkList:checked');
+		// 配列checkedIdListを定義
+		let checkedIdList = [];
+		// 配列checkedListを繰り返し処理する
+		for (checked of checkedList) {
+			// 配列checkedIdListにチェックされた要素のIDを追加
+			checkedIdList.push($(checked).val());
+		}
+		// deleteCart関数を呼び出す
+		deleteCart(checkedList, checkedIdList);
+	});
+
+	// クラス属性checkListを持つ要素の値が変更された時、changeDisable関数を呼び出す
+	$('.checkList').on('change', changeDisable);
+	
+	//購入ボタンをクリックしたときの処理
+	$('#settlementButton').on('click', () => {
+		// ユーザーIDを取得し、変数userIdに代入
+		let userId = /*[[${loginSession.getUserId()}]]*/;
+		// ユーザーIDが0、かつユーザーネームが空だった場合
+		if (userId == 0 && isEmpty($('#hiddenUserName').val())) {
+			// アラートを表示
+			alert("ログインしてください。");
+			return false;
+		}
+	});
+	
+});
+
+// deleteCartk関数を定義
+let deleteCart = (checkedList, checkedIdList) => {
+	// 非同期通信を行う
+	$.ajax({
+		type: 'POST', // HTTPの通信タイプを指定
+		url: '/grapes/cart/delete', // リクエストを送るURLを指定
+		data: JSON.stringify({'checkedIdList': checkedIdList}), // JSON文字列に変換
+		contentType: 'application/json', // 送信するデータの種類を指定
+		datatype: 'json' // サーバーから返されるデータの種類を指定
+	})
+	// ajax通信成功時及び失敗時の処理
+	.then((result) => { // 成功時の処理
+		
+		// 配列checkedListを繰り返し処理する
+		for (checked of checkedList) {
+			// 変数checkedから見て親の親要素であるを削除
+			$(checked).parent().parent().remove();
+		}
+		
+		// クラス属性checkListを持つ要素を配列checkListに代入
+		let checkList = $('.checkList');
+		// 配列checkListの要素数が0の場合
+		if (checkList.length == 0) {
+			// カート画面へリダイレクト
+			location.replace('/grapes/cart/');
+		}
+		
+		// calcTotalArea関数を呼び出す
+		calcTotalArea();
+		// changeDisable関数を呼び出す
+		changeDisable();
+	}, () => { // 失敗時の処理
+		
+		//アラートを表示
+		alert('Error: ajax connection failed.');
+	});		
+}
+
+// changeDisable関数を定義
+let changeDisable = () => {
+	// クラス属性checkListを持つ要素を配列checkListに代入
+	let checkList = $('.checkList');
+	// 変数disabledにtrueを代入
+	let disabled = true;
+	// 配列checkdListに対して繰り返し処理を行う
+	for (check of checkList) {
+		// チェックされている場合
+		if($(check).prop('checked')) {
+			// 変数disabledにfalseを代入
+			disabled = false;
+			break;
+		}
+	}
+	// 削除ボタンを無効化
+	$("#deleteButton").prop("disabled", disabled);
+}
+
+// caltTotalArea関数を定義
+let calcTotalArea= () => {
+	// 配列subtotalListを定義
+	let subtotalList = $('.subtotal');
+	// 配列countListを定義
+	let countList = $('.productCount');
+	// 変数totalPriceを定義
+	let totalPrice = 0;
+	// 変数totalCountを定義
+	let totalCount = 0;
+	
+	// 配列subtotalListに対して繰り返し処理を行う
+	$(subtotalList).each((i, subtotal) => {
+		// 要素subtotalのテキスト情報を取得しint型に変換後、変数totalPriceに代入
+		totalPrice += parseInt($(subtotal).text());
+		// 配列countListの各要素のテキスト情報を取得しint型に変換後、変数totalCountに代入
+		totalCount += parseInt($(countList[i]).text());
+	});
+
+	// ID属性totalPriceを持つ要素のテキスト情報を変更
+	$('#totalPrice').text(totalPrice);
+	// ID属性totalCountを持つ要素のテキスト情報を変更
+	$('#totalCount').text(totalCount);
+}
+
+/*]]>*/
+</script>
+
+</body>
+</html>
